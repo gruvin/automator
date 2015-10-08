@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>AUTOMATION BABY!</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="//code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+    <link rel="stylesheet" href="themes/jquery.mobile.icons.min.css">
+    <link rel="stylesheet" href="/css/styles.css">
+    <script type="text/javascript" src="//code.jquery.com/jquery-2.1.0.min.js"></script>
+    <script type="text/javascript" src="//code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+    <script type="text/javascript" src="js/jquery.timer.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      $(document).ready(function() {
+
+        // Web Socket set-up
+        var socket = io.connect();
+
+        socket.on('update', function(data){
+
+          if ($.isArray(data)) {
+            data.forEach(function(el) {
+              $('input:radio[name=switch-'+el.port+']')
+                .val([el.state == 1 ? 'on' : 'off'])
+                .checkboxradio("refresh");
+              
+              var whowhy = (el.who || '') + ((el.why) ? ((el.who) ? ': ' : '') + el.why : '');
+
+              $('span#timer_who_'+el.port)
+                .stop(true, false)
+                .html(whowhy)
+                .css('opacity', '100%')
+                .fadeTo(2000, 100) // hack to invoke a stoppable delay
+                .fadeTo(1000, 0);
+            });
+          }
+
+        });
+
+        function setGPIO(gp, state) {
+          $("#spinner").css("visibility", "visible");
+          socket.emit('setport', { 
+            port: gp, 
+            state: state,
+            who: 'User',
+          });
+          $("#spinner").css("visibility", "hidden");
+        }
+
+        function loadTimes( gp ) {
+          var html;
+
+
+          var $ul = $("ul#times");
+
+          $.getJSON("/timer/" + gp, {}, function( data ) {
+            if (data.results && data.results.length > 0) {
+              
+              html = '' 
+                  + '\n'
+                  + '<li data-role="list-divider">\n'
+                  +  '<div class="ui-grid-b">\n'
+                  +    '<div class="ui-block-a">TIME</div>\n'
+                  +    '<div class="ui-block-b">CONDITION</div>\n'
+                  +    '<div class="ui-block-c">ACTION</div>\n'
+                  +  '</div>\n'
+                  + '</li>\n';
+              $ul.html(html);
+
+              var i=0;
+              $.each( data.results, function( index, rec ) {
+                console.log("REC: ", rec);
+                html = ''
+                  + '<li class="time-row" id="time-row-' + i + '">\n'
+                  + '  <div class="ui-grid-b">\n'
+                  + '    <div class="ui-block-a">' + rec.time + '</div>\n'
+                  + '    <div class="ui-block-b">' + rec.condx + '</div>\n'
+                  + '    <div class="ui-block-c">\n'
+                  + '      <fieldset>\n'
+                  + '        <div data-role="fieldcontain">\n'
+                  + '          <input type="checkbox" data-role="flipswitch" data-mini="true" name="switch-' + i + '" '
+                                 + ((rec.state == 'on') ? 'checked="checked" ' : '') + '">\n'
+                  + '        </div>\n'
+                  + '      </fieldset>\n'
+                  + '    </div>\n'
+                  + '  </div>\n'
+                  + '</li>\n';
+                $ul.append(html).trigger("create");
+                i++;
+              });
+            } else {
+              $ul.html('<li class="time-row"><div><div>NO EVENTS</div></div></li>');
+            }
+          });
+
+        }
+
+        // UI initialization
+        $("#btnOff").button({ icon: "power" });
+        $("#btnTest").button({ icon: "gear" });
+        $("#btnPanic").button({ icon: "alert" });
+
+        // set up all GPIO switches (class="gpio-switch") on the page
+        $(".gpio-switch").each(function(ubid) {
+          var port = $(this).data("port");
+          var label = $(this).data("label");
+          label = (typeof(label) !== 'undefined') ? label : "";
+          var mini = ($(this).data("mini")) ? ' data-mini="true"' : '';
+          $(this).append(
+              '<fieldset data-gpio-port="'+port+'" data-role="controlgroup" data-type="horizontal"'+mini+'>' +
+                '<div>'+label+'</div>' +
+                '<input type="radio" name="switch-'+port+'" id="switch-'+port+'-'+ubid+'-on" value="on">' +
+                '<label for="switch-'+port+'-'+ubid+'-on">On</label>' +
+                '<input type="radio" name="switch-'+port+'" id="switch-'+port+'-'+ubid+'-off" value="off">' +
+                '<label for="switch-'+port+'-'+ubid+'-off">Off</label>' +
+              '</fieldset>'
+            ).trigger("create");
+        });
+
+        $("fieldset[data-gpio-port] input[type=radio]").on("change", function() {
+          var port = parseInt($(this).parents("fieldset").data("gpio-port"));
+          var state = ($(this).val() == "on") ? 1 : 0;
+          setGPIO(port, state);
+        });
+
+        loadTimes( 22 );
+
+      });
+    </script>
+  </head>
+  <body>
+    <div data-role="page" data-theme="a">
+      <div data-role="header">
+        <div id="spinner"></div>
+        <h1>THE AUTOMATOR</h1>
+      </div>
+    
+      <div data-role="main" class="ui-content">
+        
+        <div data-role="tabs">
+          
+          <div data-role="navbar">
+            <ul>
+              <li><a href="#timers" class="ui-btn-active">TIMERS</a>
+              <li><a href="#lights">LIGHTS</a>
+              <li><a href="#other">OTHER</a>
+            </ul>
+          </div>
+          
+          <div id="timers">
+
+            <div class="panel-group">
+              <div data-role="popup" id="popTime">
+                <form onSubmit="return(false);">
+                  <div style="padding: 10px 20px">
+                    <h3>Add New Time</h3>
+                    <div data-role="fieldcontain">
+                      <label for="time_add">Time</label>
+                      <input type="text" name="time_add" id="time_add" placeholder="00:00" />
+                    </div>
+                    <div data-role="fieldcontain">
+                      <label for="time_condx">Only if ...</label>
+                      <input type="text" name="time_condx" id="time_condx" placeholder="Conditional" />
+                    </div>
+                    <input type="submit" value="ADD" />
+                    <input type="button" value="CANCEL" />
+                  </div>
+                </form>
+              </div>
+
+              <div class="header">
+                <div>
+                  <div>
+                    <a href="#popTime" data-rel="popup" data-position-to="window"
+                      class="ui-link ui-btn ui-btn-b ui-icon-plus ui-btn-inline
+                      ui-shadow ui-corner-all ui-first-child ui-btn-icon-right"><span id="timer-label">GPIO 22</span>&nbsp;</a>
+                  </div>
+                  <div style="width: auto;"><span id="timer_who_22"></span></div> 
+                  <div style="min-width: 90px">
+                    <div data-mini="true" class="ui-block-a gpio-switch" data-port="22"></div>
+                  </div>
+                </div>
+              </div>
+              <ul id="times" data-role="listview" class="time-list">
+                <li>
+                  <div>No data for this timer</div>
+                </li>
+              </ul>
+            </div>
+
+          </div>
+
+          <div id="lights">
+            <div class="ui-grid-a">
+              <div class="ui-block-a gpio-switch" data-label="Test Light 1" data-port="27"></div>
+              <div class="ui-block-b gpio-switch" data-label="Test Light 2" data-port="17"></div>
+            </div>
+          </div>
+          
+          <div id="other">
+            <div class="ui-grid-d">
+              <div class="ui-block-a"><input type="button" id="btn1" value="1" /></div>
+              <div class="ui-block-b"><input type="button" id="btn2" value="2" /></div>
+              <div class="ui-block-c"><input type="button" id="btn3" value="3" /></div>
+              <div class="ui-block-d"><input type="button" id="btn4" value="4" /></div>
+              <div class="ui-block-e"><input type="button" id="btn5" value="5" /></div>
+            </div>
+            <div class="ui-grid-b">
+              <div class="ui-block-a"><input type="button" id="btnOff" value="ALL OFF" /></div>
+              <div class="ui-block-b"><input type="button" id="btnTest" value="TEST" /></div>
+              <div class="ui-block-c"><input type="button" id="btnPanic" value="PANIC!" /></div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </body>
+</html>

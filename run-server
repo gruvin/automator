@@ -1,0 +1,8 @@
+#!/bin/sh
+cd /home/pi/automator
+/usr/local/bin/forever start -m 5 -a -p /var/run/forever \
+  -l /tmp/forever.log -e /tmp/forever.err -o /tmp/forever.out \
+  --workingDir=/home/pi/automator \
+  /home/pi/automator/index.js
+exit $?
+

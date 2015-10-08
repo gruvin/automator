@@ -1,0 +1,9 @@
+09:00 on
+10:00 off
+16:10 on
+16:11 off # Test comment
+23:20 on
+23:25 off
+
+# blank lines, like the one above and this comment should now be ignored
+ 
